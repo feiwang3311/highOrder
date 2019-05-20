@@ -46,9 +46,7 @@ object secOrder {
         val y = new NumR(t, new Num(0.0, 0.0))
         k(y){u: Num =>
           (this.d += y.d){u: Num =>
-            (that.d += y.d){u: Num =>
-              p(u)
-            }
+            (that.d += y.d)(p)
           }
         }
       }
