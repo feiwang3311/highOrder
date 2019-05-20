@@ -111,6 +111,8 @@ object lang {
   val term4: Exp = App(Lam(x, Add(x, x)), Const(1.0f))
   val term5: Exp = Let(x, Const(1.0f), Add(x, x))
 
+  val term6: Exp = Add(Const(1.0f), Add(Const(2.0f), Const(3.0f)))
+
   def main(args: Array[String]) {
     println("term")
     val t = reset{ trans(term) }
@@ -144,6 +146,11 @@ object lang {
       Assign(Snd(trans(term5)), Const(1.0f))
     }
     show(t5)
+    println("term6")
+    val t6 = reset {
+      Assign(Snd(trans(term6)), Const(1.0f))
+    }
+    show(t6)
   }
 }
 
