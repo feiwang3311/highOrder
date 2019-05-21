@@ -17,28 +17,29 @@ object Relay {
 
   type diff = cps[Unit]
   def RST(a: =>Unit @diff) = continuations.reset { a; () }
-  val tape = ArrayBuffer.empty[Int => Unit ]
+  var tape: Unit => Unit = (x: Unit) => ()
 
   class NumR(val x: Double, var d: Double) {
-    def + (that: NumR) = shift {(k: NumR => Unit) =>
-      val y = new NumR(x + that.x, 0.0); k(y)
-      tape += (i => this.d += y.d)
-      tape += (i => that.d += y.d)
-      ()
+    def + (that: NumR) = {
+      val y = new NumR(x + that.x, 0.0)
+      tape = ((x: Unit) => this.d += y.d) andThen tape
+      tape = ((x: Unit) => that.d += y.d) andThen tape
+      y
     }
-    def * (that: NumR) = shift {(k: NumR => Unit) =>
-      val y = new NumR(x * that.x, 0.0); k(y)
-      tape += (i => this.d += y.d * that.x)
-      tape += (i => that.d += y.d * x)
-      ()
+    def * (that: NumR) = {
+      val y = new NumR(x * that.x, 0.0)
+      tape = ((x: Unit) => this.d += y.d * that.x) andThen tape
+      tape = ((x: Unit) => that.d += y.d * this.x) andThen tape
+      y
     }
     override def toString() = (x, d).toString
   }
 
-  def grad(f: NumR => NumR@diff)(x: Double) = {
+  def grad(f: NumR => NumR)(x: Double) = {
     val z = new NumR(x, 0.0)
-    RST{f(z).d = 1.0}
-    tape.foreach{t => t(0)}
+    val y = f(z)
+    y.d = 1.0
+    tape()
     z
   }
 
