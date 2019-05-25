@@ -37,10 +37,9 @@ object Relay {
 
   def grad(f: NumR => NumR)(x: Double) = {
     val z = new NumR(x, 0.0)
-    val y = f(z)
-    y.d = 1.0
+    f(z).d = 1.0
     tape()
-    z
+    z.d
   }
 
   def f1(x: NumR) = x
@@ -49,6 +48,8 @@ object Relay {
   def f4(x: NumR) = x * x
   def f5(x: NumR) = x * x * x
   def f6(x: NumR) = x + x * x + x
+  def ff(x: NumR) = x + x + x * x * x
+  val ffg = (x: Double) => grad(ff)(x)
 
   def main(args: Array[String]) {
     System.out.println("Hello")
@@ -58,5 +59,9 @@ object Relay {
     System.out.println(grad(f4)(5))
     System.out.println(grad(f5)(5))
     System.out.println(grad(f6)(5))
+
+    for (x <- 0 until 10) {
+      assert(ffg(x) == 2 + 3 * x * x)
+    }
   }
 }
