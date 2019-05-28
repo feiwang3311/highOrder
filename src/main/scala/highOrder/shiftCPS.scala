@@ -79,18 +79,7 @@ object secOrder {
     (res, z.d)
   }
 
-  // def gradR(f: NumR => NumR@diff)(x: Double) = {
-  //   val ff = (x: Num) => reset {
-  //     val a = new Num(1.0, 0.0)
-  //     f(new NumR(x, new Num(0.0, 0.0))).d = a
-  //     (p: Num => Unit) => p(a)
-  //   }
-  //   val z = new Num(x, 0.0)
-  //   ff(z){r => r.d = 1.0}
-  //   z.d
-  // }
-
-  val input = new Num(5, 5)
+  // val input = new Num(5, 5)
   def f1(x: NumR) = x
   def f2(x: NumR) = x + x
   def f3(x: NumR) = x * x
@@ -115,12 +104,5 @@ object secOrder {
     System.out.println(grad(a6)(5))
     val a7: Num => (Num => Unit) => Unit = grad(f7)
     System.out.println(grad(a7)(5))
-    // System.out.println(gradR(f1)(5))
-    // System.out.println(gradR(f2)(5))
-    // System.out.println(gradR(f3)(5))
-    // System.out.println(gradR(f4)(5))
-    // System.out.println(gradR(f5)(5))
-    // System.out.println(gradR(f6)(5))
-    // System.out.println(gradR(f7)(5))
   }
 }
