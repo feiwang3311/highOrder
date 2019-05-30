@@ -1,5 +1,3 @@
-package lantern
-
 import scala.util.continuations._
 import scala.util.continuations
 import org.scala_lang.virtualized.virtualize
@@ -11,177 +9,150 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-object highOrder {
-
-  type diff = cps[Unit]
+object highOrder2 {
 
   object GlobalTagger {
     var n = 0
     def next() = try n finally n += 1
+    def resetTag = {n = 0}
   }
-  def getTag = GlobalTagger.next()
-  def resetTag = {GlobalTagger.n = 0}
-  def gTag = GlobalTagger.n
+
+  def compare(a: Int, b: Int): Int = if (a < b) -1 else if (a == b) 0 else +1
+  def failwith(s: String): Nothing = throw new Exception(s)
 
   abstract class Num {
-    def + (that: Num): Num
-    def * (that: Num): Num
-    val l: Int // layer
-    override def toString: String
+    def +(that: Num): Num
+    def *(that: Num): Num
   }
 
-  case class NumV(val x: Double) extends Num {
-    def + (that: Num) = NumV(x + that.asInstanceOf[NumV].x)
-    def * (that: Num) = NumV(x * that.asInstanceOf[NumV].x)
-    val l = 0
-  }
-
-  // def GD(n: NumF) = if (true) n.d else liftF(0.0, n.x.l)
-  // def GD(n: NumF) = if (n.tag == gTag) n.d else liftF(0.0, n.x.l)
-  // def GD(n: NumF) = if (n.tag == gTags.getOrElse(n.l, 0)) n.d else liftF(0.0, n.x.l)
-
-  def GDp(a: NumF, b: NumF) = {
-    if (a.tag == b.tag) a.d + b.d
-    else if (a.tag < b.tag) b.d
-    else a.d
-  }
-  def GDm(a: NumF, b: NumF) = {
-    if (a.tag == b.tag) a.d * b.x + b.d * a.x
-    else if (a.tag < b.tag) b.d * a.x
-    else a.d * b.x
-  }
-
-  case class NumF(val x: Num, val d: Num, val tag: Int = 0) extends Num {
-    def + (that: Num) = {
-      val z = that.asInstanceOf[NumF]
-      println(s"$this + $z @ $gTag")
-      new NumF(x + z.x, GDp(this, z), max(this.tag, z.tag))
-      // new NumF(x + z.x, GD(this) + GD(z), gTag)
-      // println(s"$this + $z @ $gTags")
-      // new NumF(x + z.x, GD(this) + GD(z), gTags.getOrElse(this.l))
+  case class NumV(x: Double) extends Num {
+    def + (that: Num) = that match {
+      case NumV(bp)         => NumV(x + bp)
+      case NumF(bp, bt, bi) => NumF(this + bp, bt, bi)
     }
-    def * (that: Num) = {
-      val z = that.asInstanceOf[NumF]
-      // println(s"$this * $z @ $gTags")
-      // new NumF(x * z.x, GD(this) * z.x + x * GD(z), gTags.getOrElse(this.l))
-      println(s"$this * $z @ $gTag")
-      new NumF(x * z.x, GDm(this, z), max(this.tag, z.tag))
-      // new NumF(x * z.x, GD(this) * z.x + x * GD(z), gTag)
-    }
-    override def toString = (x.toString, d.toString, tag.toString).toString
-    val l = {
-      // assert(x.l == d.l)
-      x.l + 1
+    def * (that: Num) = that match {
+      case NumV(bp)         => NumV(x * bp)
+      case NumF(bp, bt, bi) => NumF(this * bp, this * bt, bi)
     }
   }
 
-  def liftF(x: Double, l: Int): Num = {
-    assert(l >= 0)
-    if (l == 0) NumV(x)
-      // else NumF(liftF(x, l-1), liftF(0, l-1), gTag)
-    else NumF(liftF(x, l-1), liftF(0, l-1), getTag)
-    // else NumF(liftF(x, l-1), liftF(0, l-1), gTags.getOrElse(l, 0))
+  case class NumF(x: Num, d: Num, tag: Int) extends Num {
+    def + (that: Num) = that match {
+      case NumV(bp)         => NumF(x + that, d, tag)
+      case NumF(bp, bt, bi) => compare(tag, bi) match {
+        case 0  => NumF(x + bp,    d + bt, tag) // tag = bi
+        case -1 => NumF(this + bp, bt,     bi)  // tag < bi
+        case _  => NumF(x + that,  d,      tag) // tag > bi
+      }
+    }
+    def * (that: Num) = that match {
+      case NumV(bp)         => NumF(x * that, d * that, tag)
+      case NumF(bp, bt, bi) => compare(tag, bi) match {
+        case 0  => NumF(x * bp,    d * bp + x * bt, tag)
+        case -1 => NumF(this * bp, this * bt,       bi)
+        case _  => NumF(x * that,  d * that,        tag) 
+      }
+    }
   }
 
-  // def withTagEnv(f: => Num) = {
-  //   val saveGTag = gTag
-  //   gTag = getTag
-  //   val temp = f
-  //   gTag = saveGTag
-  //   temp
-  // }
-  // def withTagEnv(f: => Num) = {
-  //   val saveGTag = gTags
-  //   gTags = getTag
-  //   val temp = f
-  //   gTag = saveGTag
-  //   temp
-  // }
-
-  // def grad(f: Num => Num) = (x: Num) => withTagEnv {
-  def grad(f: Num => Num) = (x: Num) => {
-    val z = new NumF(x, NumV(1.0), getTag)
-    f(z).asInstanceOf[NumF].d
+  object Num {
+    val Zero = NumV(0.0)
+    val One = NumV(1.0)
   }
 
-  case class NumR(val x: Num, var d: Num) {
-    def + (z: NumR) = shift { k: (NumR => Unit) =>
-      // val z = that.asInstanceOf[NumR]
-      val y = new NumR(x + z.x, liftF(0.0, x.l))
+  implicit class pipeOp[T](x: T) {
+    def |>[U](f: T => U): U = f(x)
+  }
+
+  def grad(f: Num => Num)(x: Num): Num = NumF(x, Num.One, GlobalTagger.next) |> f |> (x => x.asInstanceOf[NumF].d)
+
+  case class NumR(val x: Num, var d: Num, tag: Int) {
+    def + (that: NumR) = shift { k: (NumR => Unit) =>
+      val y = new NumR(x + that.x, Num.Zero, max(tag, that.tag))
       k(y)
-      d = d + y.d
-      z.d = z.d + y.d
+      compare(tag, that.tag) match {
+        case 0  => d = d + y.d; that.d = that.d + y.d
+        case -1 => that.d = that.d + y.d
+        case _  => d = d + y.d
+      }
     }
-    def * (z: NumR) = shift { k: (NumR => Unit) =>
-      // val z = that.asInstanceOf[NumR]
-      val y = new NumR(x * z.x, liftF(0.0, x.l))
+    def * (that: NumR) = shift { k: (NumR => Unit) =>
+      val y = new NumR(x * that.x, Num.Zero, max(tag, that.tag))
       k(y)
-      d = d + y.d * z.x
-      z.d = z.d + y.d * x
-    }
-    val l = {
-      assert(x.l == d.l)
-      x.l + 1
+      compare(tag, that.tag) match {
+        case 0  => d = d + y.d * that.x; that.d = that.d + y.d * x
+        case -1 => that.d = that.d + y.d * x
+        case _  => d = d + y.d * that.x
+      }
     }
   }
 
   case class Overloaded1()
   implicit val o1: Overloaded1 = Overloaded1()
   def grad(f: NumR => NumR@cps[Unit])(implicit o: Overloaded1) = (x: Num) => {
-  // def grad1(f: NumR => NumR@cps[Unit]) = (x: Num) => {
-    val z = new NumR(x, liftF(0.0, x.l))
-    continuations.reset{ f(z).d = liftF(1.0, x.l) }
+    val z = new NumR(x, Num.Zero, GlobalTagger.next)
+    reset{ f(z).d = Num.One }
     z.d
   }
 
-  case class NumR0(val x: Num, var d: Num) {
-    def + (z: NumR0) = {k: (NumR0 => Unit) =>
-      val y = new NumR0(x + z.x, liftF(0.0, x.l))
+  case class NumR0(val x: Num, var d: Num, tag: Int) {
+    def + (that: NumR0) = { k: (NumR0 => Unit) =>
+      val y = new NumR0(x + that.x, Num.Zero, max(tag, that.tag))
       k(y)
-      d = d + y.d
-      z.d = z.d + y.d
+      compare(tag, that.tag) match {
+        case 0  => d = d + y.d; that.d = that.d + y.d
+        case -1 => that.d = that.d + y.d
+        case _  => d = d + y.d
+      }
     }
-    def * (z: NumR0) = {k: (NumR0 => Unit) =>
-      val y = new NumR0(x * z.x, liftF(0.0, x.l))
+    def * (that: NumR0) = { k: (NumR0 => Unit) =>
+      val y = new NumR0(x * that.x, Num.Zero, max(tag, that.tag))
       k(y)
-      d = d + y.d * z.x
-      z.d = z.d + y.d * x
-    }
-    val l = {
-      assert(x.l == d.l)
-      x.l + 1
+      compare(tag, that.tag) match {
+        case 0  => d = d + y.d * that.x; that.d = that.d + y.d * x
+        case -1 => that.d = that.d + y.d * x
+        case _  => d = d + y.d * that.x
+      }
     }
   }
 
   case class Overloaded2()
   implicit val o2: Overloaded2 = Overloaded2()
   def grad(f: NumR0 => (NumR0 => Unit) => Unit)(implicit o: Overloaded2) = (x: Num) => {
-    val z = new NumR0(x, liftF(0.0, x.l))
-    f(z)(r => r.d = liftF(1.0, x.l))
+    val z = new NumR0(x, Num.Zero, GlobalTagger.next)
+    f(z)(r => r.d = Num.One)
     z.d
   }
 
   type Cont = (NumR0 => Unit) => Unit
-  class NumRR(val x: NumR0, var d: NumR0) {
+  class NumRR(val x: NumR0, var d: NumR0, val tag: Int) {
     def + (that: NumRR) = shift { (k: NumRR => Cont) =>
       (p: NumR0 => Unit) => (x + that.x) { t: NumR0 =>
-        val y = new NumRR(t, new NumR0(liftF(0.0, x.l - 1), liftF(0.0, x.l - 1)))
-        k(y){u: NumR0 =>
-          (this.d + y.d){u: NumR0 =>
+        val y = new NumRR(t, new NumR0(Num.Zero, Num.Zero, 0), max(tag, that.tag))
+        k(y){u: NumR0 => compare(tag, that.tag) match {
+          case 0  => (this.d + y.d){u: NumR0 =>
             this.d = u;
             (that.d + y.d){u: NumR0 =>
               that.d = u
               p(that.d)
             }
           }
-        }
+          case -1 => (that.d + y.d){u: NumR0 =>
+            that.d = u
+            p(that.d)
+          }
+          case _  => (this.d + y.d){u: NumR0 =>
+            this.d = u;
+            p(this.d)
+          }
+        }}
       }
     }
     def * (that: NumRR) = shift { (k: NumRR => Cont) =>
       (p: NumR0 => Unit) => (x * that.x) { t: NumR0 =>
-        val y = new NumRR(t, new NumR0(liftF(0.0, x.l - 1), liftF(0.0, x.l - 1)))
-        k(y){u: NumR0 =>
-          (y.d * that.x){u: NumR0 =>
+        val y = new NumRR(t, new NumR0(Num.Zero, Num.Zero, 0), max(tag, that.tag))
+        k(y){u: NumR0 => compare(tag, that.tag) match {
+          case 0  => (y.d * that.x){u: NumR0 =>
             (this.d + u){u: NumR0 =>
               this.d = u
               (y.d * this.x){u: NumR0 =>
@@ -192,86 +163,138 @@ object highOrder {
               }
             }
           }
-        }
+          case -1 => (y.d * this.x){u: NumR0 =>
+            (that.d + u){u: NumR0 =>
+              that.d = u
+              p(that.d)
+            }
+          }
+          case _  => (y.d * that.x){u: NumR0 =>
+            (this.d + u){u: NumR0 =>
+              this.d = u
+              p(this.d)
+            }
+          }
+        }}
       }
     }
-    override def toString() = (x.x, x.d, d.x, d.d).toString
+    override def toString = (x.toString, d.toString, tag.toString).toString
   }
 
   case class Overloaded3()
   implicit val o3: Overloaded3 = Overloaded3()
   def grad(f: NumRR => NumRR@cps[Cont])(implicit o: Overloaded3) = (x: NumR0) => {
-    val z = new NumRR(x, new NumR0(liftF(0.0, x.l - 1), liftF(0.0, x.l - 1)))
+    val z = new NumRR(x, new NumR0(Num.Zero, Num.Zero, 0), GlobalTagger.next)
     reset{
-      f(z).d = new NumR0(liftF(1.0, x.l - 1), liftF(0.0, x.l - 1))
+      f(z).d = new NumR0(Num.One, Num.Zero, 0) // ??? using 0 seems to be correct (not very sure)
       (p: NumR0 => Unit) => p(z.d)
     }
   }
 
-  def assertEqual(a: Num, b: Num) {
-    if (a != b) {
-      println(s"$a != $b")
-      assert(false)
-    }
+
+  def assertEqual(a: Num, b: Num): Unit = if (a != b) {
+    println(s"$a != $b")
+    assert(false)
   }
+  def main(args: Array[String]): Unit = {
 
-  def main(args: Array[String]) {
-
-    println("perturbation confusion")
+    println("perturbation confusion in forward mode AD")
     val a = grad { x: Num =>
-      val shouldBeOne = grad((y: Num) => x + y)(NumV(1)) // Evaluates to 2 instead of 1! Unexpected.
+      val shouldBeOne = grad((y: Num) => x + y)(Num.One)
       println(s"shouldBeOne is $shouldBeOne")
-      x * NumF(shouldBeOne, liftF(0.0, shouldBeOne.l))
-    }(NumV(1))
+      x * NumF(shouldBeOne, Num.Zero, 0)
+    }(Num.One)
+    assertEqual(a, NumV(1))
     println(a)
 
-    println("forward mode AD")
-    val f = (x: Num) => x * x * x
-    resetTag
-    assertEqual(grad(f)(NumV(4.0)), NumV(48))
-    resetTag
-    println(grad(f)(NumV(4.0)))
-    resetTag
-    assertEqual(grad(grad(f))(NumV(4.0)), NumV(24))
-    resetTag
-    println(grad(grad(f))(NumV(4.0)))
-    assertEqual(grad(grad(grad(f)))(NumV(4.0)), NumV(6))
-    println(grad(grad(grad(f)))(NumV(4.0)))
+    println("perturbation confusion in reverse mode AD via shift/reset")
+    val b = grad { x: NumR =>
+      val shouldBeOne = grad((y: NumR) => x + y)(o1)(Num.One)
+      println(s"shouldBeOne is $shouldBeOne")
+      println(s"x should not yet have any gradient, but: x = $x")
+      x * NumR(shouldBeOne, Num.Zero, 0)
+    }(o1)(Num.One)
+    assertEqual(b, NumV(1))
+    println(b)
 
-    println("reverse mode AD via shift/reset")
+    println("perturbation confusion in reverse mode AD via cps")
+    val c = grad { x: NumR0 => k =>
+      val shouldBeOne = grad((y: NumR0) => k1 => (x + y)(k1))(o2)(Num.One)
+      println(s"shouldBeOne is $shouldBeOne")
+      println(s"x should not yet have any gradient, but: x = $x")
+      (x * NumR0(shouldBeOne, Num.Zero, 0))(k)
+    }(o2)(Num.One)
+    assertEqual(c, NumV(1))
+    println(c)
+
+    println("perturbation confusion in reverse mode AD via cps")
+    val d = grad{ grad { x: NumRR =>
+      val temp = x
+      println(s"x before inner grad should not have any gradient: x = $x")
+      val shouldBeTwo = grad(grad((y: NumRR) => (x * y * y))(o3))(o2)(Num.One)
+      println(s"shouldBeTwo is $shouldBeTwo")
+      println(s"x after inner grad should not have any gradient: x = $x")
+      assert(temp == x)
+      (x * x * x)
+    }(o3)}(o2)(Num.One)
+    assertEqual(d, NumV(6))
+    println(d)
+
+    println("high order forward mode AD")
+    val f = (x: Num) => x * x * x
+    val f1: Num => Num = grad(f)
+    val f2: Num => Num = grad(f1)
+    val f3: Num => Num = grad(f2)
+
+    assertEqual(f1(NumV(4.0)), NumV(48))
+    println(f1(NumV(4.0)))
+
+    assertEqual(f2(NumV(4.0)), NumV(24))
+    println(f2(NumV(4.0)))
+
+    assertEqual(f3(NumV(4.0)), NumV(6))
+    println(f3(NumV(4.0)))
+
+    println("high order reverse mode AD via shift/reset and forward mode AD")
     val g = (x: NumR) => x * x * x
-    val g1 = grad(g)
-    val g2 = grad(grad(g))
-    val g3 = grad(grad(grad(g)))
+    val g1: Num => Num = grad(g)
+    val g2: Num => Num = grad(g1)
+    val g3: Num => Num = grad(g2)
+
     assertEqual(g1(NumV(4.0)), NumV(48))
     println(g1(NumV(4.0)))
+
     assertEqual(g2(NumV(4.0)), NumV(24))
     println(g2(NumV(4.0)))
+
     assertEqual(g3(NumV(4.0)), NumV(6))
     println(g3(NumV(4.0)))
 
-    println("reverse mode AD via cps")
+    println("high order reverse mode AD via cps and forward mode AD")
     val h = (x: NumR0) => (k: NumR0 => Unit) => (x * x)(r => (r * x)(k))
-    val h1 = grad(h)
-    val h2 = grad(grad(h))
-    val h3 = grad(grad(grad(h)))
+    val h1: Num => Num = grad(h)
+    val h2: Num => Num = grad(h1)
+    val h3: Num => Num = grad(h2)
+
     assertEqual(h1(NumV(4.0)), NumV(48))
     println(h1(NumV(4.0)))
+
     assertEqual(h2(NumV(4.0)), NumV(24))
     println(h2(NumV(4.0)))
+
     assertEqual(h3(NumV(4.0)), NumV(6))
     println(h3(NumV(4.0)))
 
-    println("reverse mode AD via cps inside reverse mode AD via shift/reset")
+    println("high order reverse mode AD via cps inside reverse mode AD via shift/reset, with forward mode AD")
     def t(x: NumRR) = x * x * x
     val t1: NumR0 => (NumR0 => Unit) => Unit = grad(t)
-    val t2 = grad(t1)
-    val t3 = grad(grad(t1))
+    val t2: Num => Num = grad(t1)
+    val t3: Num => Num = grad(t2)
+    
     assertEqual(t2(NumV(4.0)), NumV(24))
     println(t2(NumV(4.0)))
+
     assertEqual(t3(NumV(4.0)), NumV(6))
     println(t3(NumV(4.0)))
-
-
   }
 }
