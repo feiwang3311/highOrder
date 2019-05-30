@@ -9,7 +9,17 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-object highOrder2 {
+/*
+  this file shows that how high order gradient can be realized via:
+  nested forward mode
+  forward in reverse (via shift/reset)
+  forward in reveser (via cps)
+  forward in reverse (via cps) in reverse (via shift/reset)
+
+  the differentiable classes also use tag to handle Perturbation confusion
+*/
+
+object highOrder {
 
   object GlobalTagger {
     var n = 0

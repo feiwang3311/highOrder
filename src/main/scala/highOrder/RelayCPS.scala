@@ -1,5 +1,3 @@
-package lantern
-
 import scala.util.continuations._
 import scala.util.continuations
 import org.scala_lang.virtualized.virtualize
@@ -11,7 +9,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
 
-import scala.collection.mutable.ArrayBuffer
+/*
+  this file shows how Relay is used for reverse-mode AD
+*/
 
 object Relay {
 

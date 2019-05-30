@@ -1,5 +1,3 @@
-package lantern
-
 import scala.util.continuations._
 import scala.util.continuations
 import org.scala_lang.virtualized.virtualize
@@ -10,6 +8,10 @@ import scala.virtualization.lms.common._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Map => MutableMap}
 import scala.math._
+
+/*
+  this file shows how to next cps layer in shift/reset layer for reverse-of-reverse second order gradient
+*/
 
 object secOrder {
 
