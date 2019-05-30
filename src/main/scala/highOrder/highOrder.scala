@@ -15,6 +15,14 @@ object highOrder {
 
   type diff = cps[Unit]
 
+  object GlobalTagger {
+    var n = 0
+    def next() = try n finally n += 1
+  }
+  def getTag = GlobalTagger.next()
+  def resetTag = {GlobalTagger.n = 0}
+  def gTag = GlobalTagger.n
+
   abstract class Num {
     def + (that: Num): Num
     def * (that: Num): Num
@@ -28,36 +36,71 @@ object highOrder {
     val l = 0
   }
 
-  case class NumF(val x: Num, val d: Num) extends Num {
+  // def GD(n: NumF) = if (true) n.d else liftF(0.0, n.x.l)
+  // def GD(n: NumF) = if (n.tag == gTag) n.d else liftF(0.0, n.x.l)
+  // def GD(n: NumF) = if (n.tag == gTags.getOrElse(n.l, 0)) n.d else liftF(0.0, n.x.l)
+
+  def GDp(a: NumF, b: NumF) = {
+    if (a.tag == b.tag) a.d + b.d
+    else if (a.tag < b.tag) b.d
+    else a.d
+  }
+  def GDm(a: NumF, b: NumF) = {
+    if (a.tag == b.tag) a.d * b.x + b.d * a.x
+    else if (a.tag < b.tag) b.d * a.x
+    else a.d * b.x
+  }
+
+  case class NumF(val x: Num, val d: Num, val tag: Int = 0) extends Num {
     def + (that: Num) = {
       val z = that.asInstanceOf[NumF]
-      new NumF(x + z.x, d + z.d)
+      println(s"$this + $z @ $gTag")
+      new NumF(x + z.x, GDp(this, z), max(this.tag, z.tag))
+      // new NumF(x + z.x, GD(this) + GD(z), gTag)
+      // println(s"$this + $z @ $gTags")
+      // new NumF(x + z.x, GD(this) + GD(z), gTags.getOrElse(this.l))
     }
     def * (that: Num) = {
       val z = that.asInstanceOf[NumF]
-      new NumF(x * z.x, d * z.x + x * z.d)
+      // println(s"$this * $z @ $gTags")
+      // new NumF(x * z.x, GD(this) * z.x + x * GD(z), gTags.getOrElse(this.l))
+      println(s"$this * $z @ $gTag")
+      new NumF(x * z.x, GDm(this, z), max(this.tag, z.tag))
+      // new NumF(x * z.x, GD(this) * z.x + x * GD(z), gTag)
     }
-    override def toString = (x.toString, d.toString).toString
+    override def toString = (x.toString, d.toString, tag.toString).toString
     val l = {
-      assert(x.l == d.l)
+      // assert(x.l == d.l)
       x.l + 1
     }
   }
 
-  // var counter = -1
-  // def getTag = {
-  //   counter += 1
-  //   counter
-  // }
-
   def liftF(x: Double, l: Int): Num = {
     assert(l >= 0)
     if (l == 0) NumV(x)
-    else NumF(liftF(x, l-1), liftF(0, l-1))
+      // else NumF(liftF(x, l-1), liftF(0, l-1), gTag)
+    else NumF(liftF(x, l-1), liftF(0, l-1), getTag)
+    // else NumF(liftF(x, l-1), liftF(0, l-1), gTags.getOrElse(l, 0))
   }
 
+  // def withTagEnv(f: => Num) = {
+  //   val saveGTag = gTag
+  //   gTag = getTag
+  //   val temp = f
+  //   gTag = saveGTag
+  //   temp
+  // }
+  // def withTagEnv(f: => Num) = {
+  //   val saveGTag = gTags
+  //   gTags = getTag
+  //   val temp = f
+  //   gTag = saveGTag
+  //   temp
+  // }
+
+  // def grad(f: Num => Num) = (x: Num) => withTagEnv {
   def grad(f: Num => Num) = (x: Num) => {
-    val z = new NumF(x, liftF(1.0, x.l))
+    val z = new NumF(x, NumV(1.0), getTag)
     f(z).asInstanceOf[NumF].d
   }
 
@@ -174,11 +217,23 @@ object highOrder {
 
   def main(args: Array[String]) {
 
+    println("perturbation confusion")
+    val a = grad { x: Num =>
+      val shouldBeOne = grad((y: Num) => x + y)(NumV(1)) // Evaluates to 2 instead of 1! Unexpected.
+      println(s"shouldBeOne is $shouldBeOne")
+      x * NumF(shouldBeOne, liftF(0.0, shouldBeOne.l))
+    }(NumV(1))
+    println(a)
+
     println("forward mode AD")
     val f = (x: Num) => x * x * x
+    resetTag
     assertEqual(grad(f)(NumV(4.0)), NumV(48))
+    resetTag
     println(grad(f)(NumV(4.0)))
+    resetTag
     assertEqual(grad(grad(f))(NumV(4.0)), NumV(24))
+    resetTag
     println(grad(grad(f))(NumV(4.0)))
     assertEqual(grad(grad(grad(f)))(NumV(4.0)), NumV(6))
     println(grad(grad(grad(f)))(NumV(4.0)))
@@ -217,11 +272,6 @@ object highOrder {
     assertEqual(t3(NumV(4.0)), NumV(6))
     println(t3(NumV(4.0)))
 
-    println("perturbation confusion")
-    val a = grad { x: Num =>
-      val shouldBeOne = grad((y: Num) => x + y)(NumV(1)) // Evaluates to 2 instead of 1! Unexpected.
-      x * NumF(shouldBeOne, NumV(0))
-    }(NumV(1))
-    println(a)
+
   }
 }
