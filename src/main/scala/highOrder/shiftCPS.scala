@@ -30,20 +30,29 @@ object secOrder {
     override def toString() = (x, d).toString
   }
 
+  // implicit class pipeOp[A, B, C](x: (A => B) => C) {
+  //   def |>(f: A => B): C = x(f)
+  // }
+
+  implicit class pipeOp[A, B](f: A => B) {
+    def <|(x: (A => B) => Unit): Unit = x(f)
+  }
+
   class NumR(val x: Num, var d: Num) {
     def + (that: NumR) = shift { (k: NumR => Cont) =>
-      (p: Num => Unit) => (x + that.x) { t: Num =>
-        val y = new NumR(t, new Num(0.0, 0.0))
-        k(y){u: Num =>
-          (this.d + y.d){u: Num =>
+      (p: Num => Unit) =>
+      {t: Num =>
+        val y = new NumR(t, new Num(0.0, 0.0));
+        {u: Num =>
+          {u: Num =>
             this.d = u;
-            (that.d + y.d){u: Num =>
+            {u: Num =>
               that.d = u
               p(that.d)
-            }
-          }
-        }
-      }
+            } <| (that.d + y.d)
+          } <| (this.d + y.d) 
+        } <| (k(y))
+      } <| (x + that.x) 
     }
     def * (that: NumR) = shift { (k: NumR => Cont) =>
       (p: Num => Unit) => (x * that.x) { t: Num =>

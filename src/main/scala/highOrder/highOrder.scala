@@ -101,7 +101,7 @@ object highOrder {
   implicit val o1: Overloaded1 = Overloaded1()
   def grad(f: NumR => NumR@cps[Unit])(implicit o: Overloaded1) = (x: Num) => {
     val z = new NumR(x, Num.Zero, GlobalTagger.next)
-    reset{ f(z).d = Num.One }
+    reset { f(z).d = Num.One }
     z.d
   }
 
@@ -139,8 +139,8 @@ object highOrder {
     def + (that: NumRR) = shift { (k: NumRR => Cont) =>
       (p: NumR0 => Unit) => (x + that.x) { t: NumR0 =>
         val y = new NumRR(t, new NumR0(Num.Zero, Num.Zero, 0), max(tag, that.tag))
-        k(y){u: NumR0 => compare(tag, that.tag) match {
-          case 0  => (this.d + y.d){u: NumR0 =>
+        k(y) {u: NumR0 => compare(tag, that.tag) match {
+          case 0  => (this.d + y.d) {u: NumR0 =>
             this.d = u;
             (that.d + y.d){u: NumR0 =>
               that.d = u
@@ -195,7 +195,7 @@ object highOrder {
   implicit val o3: Overloaded3 = Overloaded3()
   def grad(f: NumRR => NumRR@cps[Cont])(implicit o: Overloaded3) = (x: NumR0) => {
     val z = new NumRR(x, new NumR0(Num.Zero, Num.Zero, 0), GlobalTagger.next)
-    reset{
+    reset {
       f(z).d = new NumR0(Num.One, Num.Zero, 0) // ??? using 0 seems to be correct (not very sure)
       (p: NumR0 => Unit) => p(z.d)
     }
@@ -221,7 +221,7 @@ object highOrder {
     val b = grad { x: NumR =>
       val shouldBeOne = grad((y: NumR) => x + y)(o1)(Num.One)
       println(s"shouldBeOne is $shouldBeOne")
-      println(s"x should not yet have any gradient, but: x = $x")
+      println(s"x should not yet have any gradient: x = $x")
       x * NumR(shouldBeOne, Num.Zero, 0)
     }(o1)(Num.One)
     assertEqual(b, NumV(1))
